@@ -118,14 +118,37 @@ python check_production_ready.py --public-url https://your-app.railway.app   # t
 
 **Railway**
 
-```bash
-npm i -g @railway/cli
-railway login
-railway init
-railway variables set AGENT_API_KEY=your-secret-key
-railway up
-railway domain        # nhận public URL
+Các lệnh PowerShell sau chạy từ gốc repo. Cài CLI một lần nếu chưa có bản cục bộ:
+
+```powershell
+npm.cmd install --prefix .venv/railway --no-audit --no-fund @railway/cli
+$railway = '.\.venv\railway\node_modules\.bin\railway.cmd'
+& $railway login --browserless
+& $railway whoami
 ```
+
+Tạo một project riêng cho lab, Redis và service agent. Nếu đã có project, dùng `railway link` và sử dụng các service hiện có.
+
+```powershell
+& $railway init --name day14-agent
+& $railway add --database redis
+& $railway add --service agent
+& $railway status
+```
+
+Trong lệnh dưới đây, `Redis` là tên service Redis trong Railway. Nếu tên service khác, sửa phần `Redis` trong tham chiếu. Dùng dấu nháy đơn để PowerShell giữ nguyên cú pháp tham chiếu của Railway. Giữ biến `$agentKey` trong phiên PowerShell để kiểm tra API sau khi deploy.
+
+```powershell
+$agentKey = [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')
+$agentKey | & $railway variable set AGENT_API_KEY --stdin --service agent --skip-deploys
+& $railway variable set 'REDIS_URL=${{Redis.REDIS_URL}}' ENVIRONMENT=production --service agent --skip-deploys
+& $railway up ./06-lab-complete --path-as-root --service agent
+& $railway domain --service agent
+```
+
+Upload qua CLI dùng `06-lab-complete/` làm gốc, chứa cả Dockerfile và `railway.toml`. Nếu kết nối GitHub để tự deploy, đặt **Root Directory** là `/06-lab-complete` và **Railway Config File** là `/06-lab-complete/railway.toml`. Để Railway cấp biến `PORT`.
+
+Sau khi có domain, dùng bốn request ở [CP6](../CHECKPOINTS.md#cp6--cloud-deployment-250--315). Kết quả lần lượt là `200` cho `/health`, `200` cho `/ready`, `401` cho `POST /ask` thiếu key và `200` khi gửi key hợp lệ. Ghi URL và kết quả vào `DEPLOYMENT.md`.
 
 **Render:** push repo lên GitHub → Render Dashboard → New → Blueprint → chọn repo (Render đọc `render.yaml`) → điền secret → Deploy.
 

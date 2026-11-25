@@ -1,0 +1,7 @@
+.env
+.env.*
+.railway/
+**/__pycache__/
+.venv/
+venv/
+benchmark-observability/

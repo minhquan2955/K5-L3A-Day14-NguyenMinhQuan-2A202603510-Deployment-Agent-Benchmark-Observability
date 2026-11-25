@@ -72,7 +72,7 @@ Redis và Qdrant báo healthy khi agent khởi động. Qua Nginx, `GET /health`
 
 ### Exercise 3.1 — Railway
 
-Agent Part 6 đã có `railway.toml` dùng Dockerfile và health check tại `/health`. **Trạng thái:** chưa deploy. URL public, ảnh deploy và kết quả bốn request CP6 sẽ được bổ sung sau khi dịch vụ chạy trên Railway với Redis.
+Agent Part 6 đã deploy trên Railway từ thư mục `06-lab-complete/`. URL public là https://k5-l3a-day14-nguyenminhquan-2a202603510-deployme-production.up.railway.app. Bốn request CP6 lần lượt trả `200`, `200`, `401` và `200`. Xem lệnh kiểm tra, cấu hình Redis và ảnh deploy trong [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ### Exercise 3.2 — So sánh Railway và Render
 
@@ -172,3 +172,5 @@ Result: 12/12 tiêu chí đạt · 41/41 checks passed
 | Chia lab và rà soát câu trả lời theo checklist | Hỗ trợ đối chiếu tài liệu K5, chạy bài mẫu và ghi lại kết quả thực nghiệm. | Chưa ghi nhận lượt tự kiểm chứng. |
 | Chẩn đoán lỗi khởi động stack observability | Hỗ trợ tái hiện lỗi `ModuleNotFoundError: uvicorn` và chỉnh `PYTHONUSERBASE` trong Dockerfile Part 7. | Chưa ghi nhận lượt tự kiểm chứng. |
 | Hoàn thiện Part 6 | Hỗ trợ trực tiếp triển khai agent, Redis, Docker, Compose và cấu hình Railway. Checker gốc báo 12/12 trong lượt kiểm tra trên Linux. | Chưa ghi nhận lượt tự kiểm chứng. |
+| Hoàn thiện Part 7 | Hỗ trợ thêm histogram, bổ sung hai tài liệu vào knowledge base, chạy eval và đối chiếu báo cáo với dữ liệu đo. | Chưa ghi nhận lượt tự kiểm chứng. |
+| Rà soát trước khi nộp | Đã chạy lại checker Part 6 trên Linux với Docker và Redis, đạt 12/12 (41/41). Eval v2 đạt 23/23, không regression. Bốn request CP6 trực tiếp trên Railway trả 200, 200, 401, 200. | Đã cung cấp ba ảnh deploy. Chưa ghi nhận lượt tự chạy checker và eval. |

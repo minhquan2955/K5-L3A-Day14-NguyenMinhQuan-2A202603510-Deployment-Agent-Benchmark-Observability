@@ -2,7 +2,7 @@
 
 **Họ tên:** Nguyễn Minh Quân  
 **Ngày chạy:** 25/11/2026  
-**Môi trường:** Windows, Python 3.14.4 trong `.venv` cho benchmark local, Docker Desktop 29.6.2 cho stack production. Agent v1/v2 chạy local trên cổng 18001/18002. Bản ghi này dùng số đo từ các lần chạy hỗ trợ bởi Codex.
+**Môi trường:** Windows, Python 3.14.4 trong `.venv` cho benchmark local, Docker Desktop 29.6.2 cho stack production. Agent v1/v2 chạy local trên cổng 18001/18002. Các phép đo hiệu năng và observability dùng cấu hình baseline. Lần eval cuối dùng knowledge base đã cập nhật trong `develop/`.
 
 ## 1. SLO và quality gate
 
@@ -28,6 +28,8 @@ Mỗi lần chạy gửi 300 request vào agent v2 với `MOCK_SLOW_RATE=0.03`, 
 
 RPS tăng tới concurrency 50 rồi giảm ở 100. Tại 100, p95 cao hơn 3 giây. Phép đo một lần trên máy này cho thấy có điểm bão hòa trong cấu hình đã thử. Cần lặp lại hoặc xem tài nguyên để xác định nút thắt.
 
+p50, p95 và p99 là các ngưỡng mà lần lượt khoảng 50%, 95% và 99% request hoàn tất trong thời gian đó. Với SLO 500 ms và 2% lỗi, concurrency 50 vượt ngưỡng lỗi, còn concurrency 100 vượt ngưỡng p95.
+
 ### 2.2 Tail latency
 
 Mỗi lần chạy gửi 300 request ở concurrency 20, giữ `MOCK_ERROR_RATE=0.01`.
@@ -42,30 +44,59 @@ Mỗi lần chạy gửi 300 request ở concurrency 20, giữ `MOCK_ERROR_RATE=
 
 ## 3. Benchmark chất lượng (develop)
 
-Tắt lỗi upstream ngẫu nhiên bằng `MOCK_ERROR_RATE=0` trong hai lần eval baseline để tập trung đo nội dung câu trả lời.
+Tắt lỗi upstream ngẫu nhiên bằng `MOCK_ERROR_RATE=0` trong các lần eval để tập trung đo nội dung câu trả lời. Lần chạy cuối so sánh với `reports/eval_v2.json` và lưu vào [eval_v2_fixed.json](reports/eval_v2_fixed.json).
 
 | Chỉ số | Agent v1 | Agent v2 | Agent v2 sau khi sửa KB |
 |---|---:|---:|---|
-| Accuracy | 4.3% (1/23) | 91.3% (21/23) | Chờ chạy |
-| Avg tokens / câu | 56.8 | 109.1 | Chờ chạy |
-| Tổng cost (USD) | 0.00039975 | 0.000762 | Chờ chạy |
-| Cost / câu đúng (USD) | 0.00039975 | 0.00003627 | Chờ chạy |
-| Quality gate baseline | FAIL | PASS, 0 regression | Chờ chạy |
+| Accuracy | 4.3% (1/23) | 91.3% (21/23) | 100% (23/23) |
+| Avg tokens / câu | 56.8 | 109.1 | 114.0 |
+| Tổng cost (USD) | 0.00039975 | 0.000762 | 0.000793 |
+| Cost / câu đúng (USD) | 0.00039975 | 0.00003627 | 0.00003449 |
+| Quality gate | FAIL | PASS, 0 regression | PASS ở ngưỡng 100%, 0 regression |
 
 | Câu v2 sai | Keyword thiếu theo `eval_v2.json` | Sửa KB |
 |---|---|---|
-| `security-02` | token, hết hạn, chữ ký | Cần bổ sung |
-| `scaling-03` | cpu, memory, custom metrics | Cần bổ sung |
+| `security-02` | token, hết hạn, chữ ký | Bổ sung tài liệu về khác biệt giữa API key và JWT, gồm kiểm tra chữ ký và thời hạn của token |
+| `scaling-03` | cpu, memory, custom metrics | Bổ sung tài liệu về chỉ số mà Kubernetes HPA dùng để điều chỉnh số pod |
 
-V2 dùng nhiều token hơn mỗi câu, đồng thời có chi phí trên mỗi câu đúng thấp hơn vì trả lời đúng 21 thay vì 1 câu. Chi phí là số ước tính của mock LLM. Latency của hai lượt eval chịu ảnh hưởng của request chậm ngẫu nhiên.
+V2 dùng nhiều token hơn mỗi câu, đồng thời có chi phí trên mỗi câu đúng thấp hơn vì trả lời được nhiều câu hơn. Sau khi bổ sung hai tài liệu, tổng chi phí ước tính tăng từ 0.000762 lên 0.000793 USD, còn chi phí trên mỗi câu đúng giảm từ 0.00003627 xuống 0.00003449 USD. Các giá trị này là ước tính của mock LLM. Latency eval chịu ảnh hưởng của tỷ lệ request chậm ngẫu nhiên, nên dùng phép đo tải ở mục 2 để đánh giá độ trễ.
 
-**Cần bổ sung** kết quả `eval_v2_fixed.json`, phần giải thích thay đổi KB và job CI hoặc cách dùng exit code để chặn merge.
+### Quality gate trong CI
+
+Trong job chạy ở thư mục `develop/`, khởi động agent với `AGENT_VERSION=v2` và `MOCK_ERROR_RATE=0`, chờ `/health` trả `200`, rồi chạy:
+
+```bash
+python eval/run_eval.py --url http://localhost:8000 --min-accuracy 0.85 \
+  --baseline "$BASELINE_REPORT" --out /tmp/eval-ci.json
+```
+
+`BASELINE_REPORT` trỏ tới JSON đã được chấp nhận trên nhánh đích. Exit code `1` làm job thất bại nếu accuracy dưới 85% hoặc có câu đúng ở baseline trở thành sai. Đặt job là required status check của nhánh đích để chặn merge. Lần kiểm tra cuối cho bài nộp dùng ngưỡng `1.0`.
 
 ## 4. Observability stack (production)
 
 ### 4.1 Dashboard và metrics
 
+Exercise 7.1 ghi nhận ba loại metric trong app local:
+
+- **Counter** `http_requests_total` đếm request theo method, route và HTTP status.
+- **Gauge** `agent_in_flight_requests` tăng khi bắt đầu và giảm khi request kết thúc.
+- **Histogram** `agent_question_length_chars` chia độ dài câu hỏi vào bucket. Với một câu thử 40 ký tự, `_count` tăng 1 và `_sum` tăng 40.
+
+Label `route` dùng mẫu route cố định và nhóm URL không khớp thành `unmatched`. Nếu dùng URL thô, mỗi đường dẫn ngẫu nhiên do bot gửi có thể tạo thêm time series và làm tăng chi phí lưu trữ, bộ nhớ và truy vấn.
+
 [Ảnh Grafana](screenshots/grafana-dashboard.png) ghi nhận **39.8 req/s**, **0.81% lỗi**, **p95 294.71 ms** và **3 instance up** tại thời điểm chụp. Gọi `GET /metrics` qua Nginx trả `404`. Prometheus scrape agent trực tiếp trong mạng Docker.
+
+Để trả lời Exercise 7.4, đo riêng bằng các truy vấn PromQL của dashboard khi có 2 replica, Locust chạy 30 users và tăng 5 users/giây.
+
+| Chỉ số | Kết quả |
+|---|---:|
+| p95 `POST /ask` | 292.72 ms |
+| Avg `POST /ask` | 230.76 ms |
+| Request/s theo instance | 4.99 và 4.97 |
+| Input tokens/s | 738.62 |
+| Output tokens/s | 392.01 |
+
+p95 cao hơn avg khoảng 62 ms tại thời điểm đo. Nginx chia tải gần đều giữa hai replica theo request/s. Input tokens/s cao hơn vì prompt chứa câu hỏi và ngữ cảnh truy xuất, trong khi output chỉ gồm câu trả lời.
 
 ### 4.2 Thí nghiệm cảnh báo
 
@@ -77,6 +108,8 @@ Chạy Locust với 30 người dùng và tốc độ tăng 5 người dùng/gi�
 | `MOCK_SLOW_RATE=0.3` | `AgentHighLatencyP95` | 161 s | Latency p95 |
 
 [Ảnh trang Alerts](screenshots/prometheus-alert-firing.png) có cả hai alert ở trạng thái `firing` cùng lúc. `LLMCostBurnRateHigh` cũng đang firing trong ảnh và đã được quan sát trước khi áp dụng hai biến lỗi. `promtool test rules` trả `SUCCESS`.
+
+Khi thay v2 bằng v1, HTTP vẫn có thể trả `200` dù câu trả lời thiếu nội dung. Để phát hiện, chạy eval golden dataset trước merge và định kỳ sau deploy. Theo dõi accuracy hoặc số câu bị regression như một chỉ số chất lượng riêng.
 
 ### 4.3 Trace
 
@@ -105,4 +138,8 @@ Trong phép đo này, tăng lên 3 replica làm p95 giảm 10 ms, p99 giữ ở 
 
 ## 6. Kết luận
 
-**Cần bổ sung** nhận xét của học viên về SLO, trace và alert dựa trên kết quả thực nghiệm.
+1. SLO theo percentile bắt được phần đuôi mà trung bình dễ che khuất. Với tỷ lệ request chậm 3%, p99 đã vượt 1,7 giây trong khi p95 chỉ 241,1 ms.
+2. Trace cho biết phần nào của request chiếm thời gian. Trong trace chậm quan sát được, span gọi model chiếm 98,53% thời gian.
+3. Alert hạ tầng báo lỗi và độ trễ. Eval chất lượng phát hiện câu trả lời sai dù API vẫn trả thành công.
+
+Khi chạy production, theo dõi thêm tỷ lệ `502/504` tại Nginx để phát hiện các lỗi mà client đã nhận trước khi agent có thể ghi trạng thái.
