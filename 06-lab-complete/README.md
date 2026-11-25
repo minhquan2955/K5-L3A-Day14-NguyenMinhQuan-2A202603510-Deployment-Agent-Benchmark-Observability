@@ -88,8 +88,8 @@ cp .env.example .env
 # Chạy nhanh không cần Docker (cần Redis riêng nếu muốn test rate limit thật)
 AGENT_API_KEY=dev-key uvicorn app.main:app --reload
 
-# Chạy cả agent + redis
-docker compose up --build
+# Chạy cả agent + Redis với API key dùng thử ở local
+AGENT_API_KEY=dev-key docker compose up --build
 
 curl http://localhost:8000/health
 curl -X POST http://localhost:8000/ask \
